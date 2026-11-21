@@ -1,0 +1,514 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================
+    // FUNÇÕES GERAIS
+    // =========================
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isDay(s) {
+      // Validação de formato e faixa básica.
+      // A validação completa do calendário fica no aplicativo.
+      return s is string
+        && s.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$');
+    }
+
+    function two(n) {
+      return n < 10 ? '0' + string(n) : string(n);
+    }
+
+    function dayOf(t) {
+      return string(t.year()) + '-' + two(t.month()) + '-' + two(t.day());
+    }
+
+    // Tolerância de 1 dia em UTC para fusos à frente do UTC.
+    function notFuture(s) {
+      return s <= dayOf(request.time + duration.value(1, 'd'));
+    }
+
+    function validRating(r) {
+      return r == null
+        || (r is number
+          && r >= 0
+          && r <= 5
+          && r * 2 == int(r * 2));
+    }
+
+    function validOptionalDay(d) {
+      return d == null || isDay(d);
+    }
+
+    function validOptionalString(s, max) {
+      return s == null || (s is string && s.size() <= max);
+    }
+
+    // =========================
+    // USUÁRIOS
+    // =========================
+
+    function validGoal(g) {
+      return g is map
+        && g.keys().hasOnly(['year', 'target'])
+        && g.keys().hasAll(['year', 'target'])
+        && g.year is int
+        && g.target is int
+        && g.target >= 1
+        && g.target <= 1000;
+    }
+
+    function validStreak(s) {
+      return s == null
+        || (s is map
+          && s.keys().hasOnly(['longest', 'updatedAt'])
+          && s.keys().hasAll(['longest', 'updatedAt'])
+          && s.longest is int
+          && s.longest >= 0
+          && s.updatedAt is timestamp);
+    }
+
+    function validAiPreferences(a) {
+      return a is map
+        && a.keys().hasOnly([
+          'allowReviewAnalysis',
+          'allowReviewAnalysisAt'
+        ])
+        && a.keys().hasAll([
+          'allowReviewAnalysis',
+          'allowReviewAnalysisAt'
+        ])
+        && a.allowReviewAnalysis is bool
+        && (
+          (a.allowReviewAnalysis == true
+            && a.allowReviewAnalysisAt is timestamp)
+          ||
+          (a.allowReviewAnalysis == false
+            && a.allowReviewAnalysisAt == null)
+        );
+    }
+
+    function validUser(u) {
+      return u.keys().hasOnly([
+          'displayName',
+          'createdAt',
+          'goal',
+          'streak',
+          'aiPreferences'
+        ])
+        && u.keys().hasAll([
+          'createdAt',
+          'goal',
+          'aiPreferences'
+        ])
+        && u.createdAt is timestamp
+        && (!('displayName' in u)
+          || (u.displayName is string
+            && u.displayName.size() <= 200))
+        && validGoal(u.goal)
+        && validStreak(u.get('streak', null))
+        && validAiPreferences(u.aiPreferences);
+    }
+
+    // =========================
+    // LIVROS
+    // =========================
+
+    function validBook(b) {
+      return b.keys().hasOnly([
+          'title',
+          'author',
+          'coverUrl',
+          'genre',
+          'externalId',
+          'source',
+          'status',
+          'pageCount',
+          'currentPage',
+          'startedAt',
+          'finishedAt',
+          'rating',
+          'review',
+          'wouldRecommend',
+          'lastReadingId',
+          'lastReadingDate',
+          'addedAt',
+          'updatedAt'
+        ])
+        && b.keys().hasAll([
+          'title',
+          'author',
+          'coverUrl',
+          'genre',
+          'externalId',
+          'source',
+          'status',
+          'pageCount',
+          'currentPage',
+          'startedAt',
+          'finishedAt',
+          'rating',
+          'review',
+          'wouldRecommend',
+          'lastReadingId',
+          'lastReadingDate',
+          'addedAt',
+          'updatedAt'
+        ])
+
+        && b.title is string
+        && b.title.size() >= 1
+        && b.title.size() <= 300
+
+        && b.author is string
+        && b.author.size() <= 300
+
+        && validOptionalString(b.coverUrl, 2000)
+        && validOptionalString(b.genre, 200)
+        && validOptionalString(b.externalId, 300)
+
+        && b.source in ['search', 'manual', 'suggestion']
+        && b.status in ['wishlist', 'reading', 'finished']
+
+        && (b.pageCount == null
+          || (b.pageCount is int && b.pageCount > 0))
+
+        && b.currentPage is int
+        && b.currentPage >= 0
+        && (b.pageCount == null
+          || b.currentPage <= b.pageCount)
+
+        && validOptionalDay(b.startedAt)
+        && validOptionalDay(b.finishedAt)
+
+        && validRating(b.rating)
+        && validOptionalString(b.review, 5000)
+
+        && (b.wouldRecommend == null
+          || b.wouldRecommend in ['yes', 'maybe', 'no'])
+
+        && (b.lastReadingId == null
+          || b.lastReadingId is string)
+
+        && validOptionalDay(b.lastReadingDate)
+
+        && b.addedAt is timestamp
+        && b.updatedAt is timestamp;
+    }
+
+    // =========================
+    // ANOTAÇÕES
+    // =========================
+
+    function validNote(n) {
+      return n.keys().hasOnly([
+          'text',
+          'page',
+          'createdAt',
+          'updatedAt'
+        ])
+        && n.keys().hasAll([
+          'text',
+          'page',
+          'createdAt',
+          'updatedAt'
+        ])
+
+        && n.text is string
+        && n.text.size() >= 1
+        && n.text.size() <= 5000
+
+        && (n.page == null
+          || (n.page is int && n.page >= 1))
+
+        && n.createdAt is timestamp
+        && n.updatedAt is timestamp;
+    }
+
+    // =========================
+    // SESSÕES DE LEITURA
+    // =========================
+
+    function validReading(r) {
+      return r.keys().hasOnly([
+          'date',
+          'fromPage',
+          'toPage',
+          'pages',
+          'previousId',
+          'voided',
+          'createdAt',
+          'updatedAt'
+        ])
+        && r.keys().hasAll([
+          'date',
+          'fromPage',
+          'toPage',
+          'pages',
+          'previousId',
+          'voided',
+          'createdAt',
+          'updatedAt'
+        ])
+
+        && isDay(r.date)
+        && notFuture(r.date)
+
+        && r.fromPage is int
+        && r.toPage is int
+        && r.pages is int
+
+        && r.fromPage >= 0
+        && r.toPage > r.fromPage
+        && r.pages == r.toPage - r.fromPage
+
+        && (r.previousId == null
+          || r.previousId is string)
+
+        && r.voided is bool
+
+        && r.createdAt is timestamp
+        && r.updatedAt is timestamp;
+    }
+
+    // =========================
+    // RESUMOS DIÁRIOS
+    // =========================
+
+    function validReadingLog(log, day) {
+      return log.keys().hasOnly([
+          'date',
+          'books',
+          'totalPages',
+          'updatedAt'
+        ])
+        && log.keys().hasAll([
+          'date',
+          'books',
+          'totalPages',
+          'updatedAt'
+        ])
+
+        && isDay(day)
+        && log.date == day
+        && log.books is map
+        && log.books.keys().size() >= 1
+        && log.books.keys().size() <= 50
+        && log.totalPages is int
+        && log.totalPages > 0
+        && log.updatedAt is timestamp;
+    }
+
+    // =========================
+    // SUGESTÕES
+    // =========================
+
+    function validSuggestion(s) {
+      return s.keys().hasOnly([
+          'title',
+          'author',
+          'coverUrl',
+          'externalId',
+          'basedOnBookId',
+          'reason',
+          'status',
+          'createdAt'
+        ])
+        && s.keys().hasAll([
+          'title',
+          'author',
+          'coverUrl',
+          'externalId',
+          'basedOnBookId',
+          'reason',
+          'status',
+          'createdAt'
+        ])
+
+        && s.title is string
+        && s.title.size() >= 1
+        && s.title.size() <= 300
+
+        && s.author is string
+        && s.author.size() <= 300
+
+        && validOptionalString(s.coverUrl, 2000)
+        && validOptionalString(s.externalId, 300)
+
+        && s.basedOnBookId is string
+        && s.basedOnBookId.size() > 0
+
+        && s.reason is string
+        && s.reason.size() <= 500
+
+        && s.status in ['new', 'wishlist', 'dismissed']
+
+        && s.createdAt is timestamp;
+    }
+
+    // =========================
+    // DOCUMENTOS DO USUÁRIO
+    // =========================
+
+    match /users/{uid} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && validUser(request.resource.data);
+
+      // =========================
+      // LIVROS
+      // =========================
+
+      match /books/{bookId} {
+        allow read, delete: if isOwner(uid);
+
+        allow create, update: if isOwner(uid)
+          && validBook(request.resource.data);
+
+        // =========================
+        // NOTAS
+        // =========================
+
+        match /notes/{noteId} {
+          allow read, delete: if isOwner(uid);
+
+          allow create, update: if isOwner(uid)
+            && validNote(request.resource.data);
+        }
+
+        // =========================
+        // SESSÕES DE LEITURA
+        // =========================
+
+        match /readings/{readingId} {
+
+          function bookPath() {
+            return /databases/$(database)/documents/users/$(uid)/books/$(bookId);
+          }
+
+          allow read: if isOwner(uid);
+
+          // Registrar nova sessão
+          allow create: if isOwner(uid)
+            && validReading(request.resource.data)
+            && request.resource.data.voided == false
+
+            // Página inicial = progresso atual do livro
+            && request.resource.data.fromPage
+              == get(bookPath()).data.currentPage
+
+            // Progresso atualizado na mesma transação
+            && getAfter(bookPath()).data.currentPage
+              == request.resource.data.toPage
+
+            // Ponteiro para sessão recém-criada
+            && getAfter(bookPath()).data.lastReadingId
+              == readingId
+
+            // Encadeamento
+            && request.resource.data.previousId
+              == get(bookPath()).data.get('lastReadingId', null)
+
+            // Data não pode ser anterior à sessão anterior
+            && (
+              get(bookPath()).data.get('lastReadingDate', null) == null
+              || request.resource.data.date
+                >= get(bookPath()).data.lastReadingDate
+            );
+
+          // Editar ou anular
+          allow update: if isOwner(uid) && (
+
+            // Anular sessão antiga
+            (
+              request.resource.data.diff(resource.data)
+                .affectedKeys()
+                .hasOnly(['voided', 'updatedAt'])
+
+              && request.resource.data.voided == true
+              && resource.data.voided == false
+
+              // Não pode anular a última sessão
+              && get(bookPath()).data.get('lastReadingId', null)
+                != readingId
+            )
+
+            ||
+
+            // Editar somente a última sessão
+            (
+              validReading(request.resource.data)
+
+              && resource.data.voided == false
+              && request.resource.data.voided == false
+
+              && get(bookPath()).data.get('lastReadingId', null)
+                == readingId
+
+              // Mantém o encadeamento original
+              && request.resource.data.fromPage
+                == resource.data.fromPage
+
+              && request.resource.data.previousId
+                == resource.data.previousId
+
+              // Livro deve acompanhar o progresso atualizado
+              && getAfter(bookPath()).data.currentPage
+                == request.resource.data.toPage
+            )
+          );
+
+          // Excluir somente a última sessão não anulada
+          // ou limpar sessão órfã quando livro já foi removido
+          allow delete: if isOwner(uid) && (
+
+            (
+              resource.data.voided == false
+
+              && get(bookPath()).data.get('lastReadingId', null)
+                == readingId
+
+              && getAfter(bookPath()).data.currentPage
+                == resource.data.fromPage
+
+              && getAfter(bookPath()).data.get('lastReadingId', null)
+                == resource.data.previousId
+            )
+
+            || !exists(bookPath())
+          );
+        }
+      }
+
+      // =========================
+      // RESUMOS DIÁRIOS
+      // =========================
+
+      match /readingLogs/{day} {
+        allow read, delete: if isOwner(uid);
+
+        allow create, update: if isOwner(uid)
+          && validReadingLog(request.resource.data, day);
+      }
+
+      // =========================
+      // SUGESTÕES
+      // =========================
+
+      match /suggestions/{suggestionId} {
+        allow read, delete: if isOwner(uid);
+
+        allow create, update: if isOwner(uid)
+          && validSuggestion(request.resource.data);
+      }
+    }
+  }
+}
