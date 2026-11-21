@@ -5,32 +5,30 @@ import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
 
 interface AngularFireAuthCompat extends AngularFireAuth {
-  signInWithPopup(provider: firebase.auth.AuthProvider): Promise<firebase.auth.UserCredential>;
-  createUserWithEmailAndPassword(email: string, password: string): Promise<firebase.auth.UserCredential>;
-  signInWithEmailAndPassword(email: string, password: string): Promise<firebase.auth.UserCredential>;
+  signInWithPopup(
+    provider: firebase.auth.AuthProvider
+  ): Promise<firebase.auth.UserCredential>;
+
+  createUserWithEmailAndPassword(
+    email: string,
+    password: string
+  ): Promise<firebase.auth.UserCredential>;
+
+  signInWithEmailAndPassword(
+    email: string,
+    password: string
+  ): Promise<firebase.auth.UserCredential>;
+
   signOut(): Promise<void>;
   currentUser: Promise<firebase.User | null>;
 }
 
 @Injectable()
 export class AuthService {
+  private auth: AngularFireAuthCompat;
 
-private auth: AngularFireAuthCompat;
-
-  constructor(
-    public afAuth: AngularFireAuth
-  ) {
-      this.auth = afAuth as AngularFireAuthCompat;
-    }
-
-  doFacebookLogin() {
-    const provider = new firebase.auth.FacebookAuthProvider();
-    return this.auth.signInWithPopup(provider);
-  }
-
-  doTwitterLogin() {
-    const provider = new firebase.auth.TwitterAuthProvider();
-    return this.auth.signInWithPopup(provider);
+  constructor(public afAuth: AngularFireAuth) {
+    this.auth = afAuth as AngularFireAuthCompat;
   }
 
   doGoogleLogin() {

@@ -4,15 +4,16 @@
 
 export const environment = {
   production: false,
-  firebaseConfig: {
-    apiKey: "AIzaSyDZdCOCZUE5GUVunaXZGZjTsmc-GXkg880",
-    authDomain: "bibliotech-3e2bc.firebaseapp.com",
-    databaseURL: "https://bibliotech-3e2bc.firebaseio.com",
-    projectId: "bibliotech-3e2bc",
-    storageBucket: "bibliotech-3e2bc.appspot.com",
-    messagingSenderId: "161049160409",
-    appId: "1:161049160409:web:1f565a79c4cc9b78"
-  },
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+   firebaseConfig : {
+    apiKey: "AIzaSyAPrM1a_6TgTQSt8gmWwXcuY2bAda6cqes",
+    authDomain: "bibliotek-e9bbd.firebaseapp.com",
+    projectId: "bibliotek-e9bbd",
+    storageBucket: "bibliotek-e9bbd.firebasestorage.app",
+    messagingSenderId: "597808836312",
+    appId: "1:597808836312:web:7969ba4034ad4e1e0571ad",
+    measurementId: "G-4LCH4VT4SL"
+  }
 };
 
 /*
