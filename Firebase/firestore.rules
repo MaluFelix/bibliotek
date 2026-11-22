@@ -205,6 +205,46 @@ service cloud.firestore {
     }
 
     // =========================
+    // ESTADO DO LIVRO
+    // =========================
+
+    function validBookState(b) {
+      return
+        // Livro na lista de desejos
+        (
+          b.status == 'wishlist'
+          && b.currentPage == 0
+          && b.startedAt == null
+          && b.finishedAt == null
+          && b.lastReadingId == null
+          && b.lastReadingDate == null
+        )
+
+        ||
+
+        // Livro em leitura
+        (
+          b.status == 'reading'
+          && b.startedAt != null
+          && b.finishedAt == null
+        )
+
+        ||
+
+        // Livro finalizado
+        (
+          b.status == 'finished'
+          && b.startedAt != null
+          && b.finishedAt != null
+          && (
+            b.pageCount == null
+            || b.currentPage == b.pageCount
+          )
+        );
+    }
+
+
+    // =========================
     // ANOTAÇÕES
     // =========================
 
@@ -368,10 +408,95 @@ service cloud.firestore {
       // =========================
 
       match /books/{bookId} {
+
+        function readingPath(readingId) {
+          return /databases/$(database)/documents/users/$(uid)/books/$(bookId)/readings/$(readingId);
+        }
+
         allow read, delete: if isOwner(uid);
 
-        allow create, update: if isOwner(uid)
-          && validBook(request.resource.data);
+        // Criar livro
+        allow create: if isOwner(uid)
+          && validBook(request.resource.data)
+          && validBookState(request.resource.data);
+
+        // Atualizar livro
+        allow update: if isOwner(uid)
+          && validBook(request.resource.data)
+          && validBookState(request.resource.data)
+          && (
+            // Alterações de metadados sem mexer no estado da leitura
+            request.resource.data.currentPage
+              == resource.data.currentPage
+
+            && request.resource.data.lastReadingId
+              == resource.data.lastReadingId
+
+            && request.resource.data.lastReadingDate
+              == resource.data.lastReadingDate
+
+            ||
+
+            // Editar a última sessão de leitura
+            (
+              request.resource.data.lastReadingId
+                == resource.data.lastReadingId
+
+              && request.resource.data.currentPage
+                != resource.data.currentPage
+
+              && request.resource.data.lastReadingId != null
+
+              && get(readingPath(resource.data.lastReadingId)).data.toPage
+                != getAfter(readingPath(resource.data.lastReadingId)).data.toPage
+
+              && getAfter(readingPath(resource.data.lastReadingId)).data.toPage
+                == request.resource.data.currentPage
+            )
+
+            ||
+
+            // Registrar uma nova sessão
+            (
+              request.resource.data.lastReadingId
+                != resource.data.lastReadingId
+
+              && request.resource.data.lastReadingId != null
+
+              && !exists(readingPath(request.resource.data.lastReadingId))
+
+              && existsAfter(readingPath(request.resource.data.lastReadingId))
+
+              && getAfter(readingPath(request.resource.data.lastReadingId)).data.toPage
+                == request.resource.data.currentPage
+
+              && getAfter(readingPath(request.resource.data.lastReadingId)).data.previousId
+                == resource.data.get('lastReadingId', null)
+            )
+
+            ||
+
+            // Excluir a última sessão e restaurar o progresso
+            (
+              request.resource.data.lastReadingId
+                != resource.data.lastReadingId
+
+              && (
+                request.resource.data.lastReadingId == null
+                ||
+                (
+                  existsAfter(readingPath(request.resource.data.lastReadingId))
+                  && getAfter(readingPath(request.resource.data.lastReadingId)).data.toPage
+                    == request.resource.data.currentPage
+                )
+              )
+
+              && !existsAfter(readingPath(resource.data.lastReadingId))
+
+              && get(readingPath(resource.data.lastReadingId)).data.fromPage
+                == request.resource.data.currentPage
+            )
+          );
 
         // =========================
         // NOTAS
@@ -392,6 +517,10 @@ service cloud.firestore {
 
           function bookPath() {
             return /databases/$(database)/documents/users/$(uid)/books/$(bookId);
+          }
+
+          function previousReadingPath(previousId) {
+            return /databases/$(database)/documents/users/$(uid)/books/$(bookId)/readings/$(previousId);
           }
 
           allow read: if isOwner(uid);
@@ -459,6 +588,13 @@ service cloud.firestore {
 
               && request.resource.data.previousId
                 == resource.data.previousId
+
+              // A data não pode ser anterior à sessão precedente
+              && (
+                resource.data.previousId == null
+                || request.resource.data.date
+                  >= get(previousReadingPath(resource.data.previousId)).data.date
+              )
 
               // Livro deve acompanhar o progresso atualizado
               && getAfter(bookPath()).data.currentPage

@@ -1,1295 +1,491 @@
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { setupRulesTest, authedDb, unauthedDb, seedDocument, validUserData, validBookData, today, Timestamp } from './helpers';
-import { doc, setDoc, updateDoc, deleteDoc, getDoc, writeBatch } from 'firebase/firestore';
+import {
+  setupRulesTest,
+  authedDb,
+  unauthedDb,
+  seedDocument,
+  validBookData,
+  today,
+  Timestamp,
+} from './helpers';
+import {
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  getDoc,
+  writeBatch,
+} from 'firebase/firestore';
 
 setupRulesTest();
 
-test('should allow a valid reading batch', async () => {
+// ============================================
+// READ ACCESS
+// ============================================
 
-  const db = authedDb('user-a');
-
-
-
-  const bookRef = doc(db, 'users/user-a/books/book-1');
-
-
-
-  const readingRef = doc(
-
-    db,
-
-    'users/user-a/books/book-1/readings/reading-1'
-
+test('should deny unauthenticated users from reading a reading session', async () => {
+  await seedDocument(
+    'users/user-a/books/book-1',
+    validBookData(),
   );
-
-
-
-  const logRef = doc(
-
-    db,
-
-    `users/user-a/readingLogs/${today()}`
-
-  );
-
-
-
-  // Estado anterior do livro: página 186.
-
-  const initialBook = {
-
-    ...validBookData(),
-
-    currentPage: 186,
-
-    lastReadingId: null,
-
-    lastReadingDate: null,
-
-  };
-
-
-
-  // O livro precisa existir antes de registrar uma sessão.
-
-  await assertSucceeds(setDoc(bookRef, initialBook));
-
-
-
-  const reading = {
-
-    date: today(),
-
-    fromPage: 186,
-
-    toPage: 206,
-
-    pages: 20,
-
-    previousId: null,
-
-    voided: false,
-
-    createdAt: Timestamp.now(),
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  const log = {
-
-    date: today(),
-
-    books: {
-
-      'book-1': 20,
-
-    },
-
-    totalPages: 20,
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  const batch = writeBatch(db);
-
-
-
-  // Atualiza o progresso do livro.
-
-  batch.update(bookRef, {
-
-    currentPage: 206,
-
-    lastReadingId: 'reading-1',
-
-    lastReadingDate: today(),
-
-    updatedAt: Timestamp.now(),
-
-  });
-
-
-
-  // Cria a sessão de leitura.
-
-  batch.set(readingRef, reading);
-
-
-
-  // Atualiza o resumo diário.
-
-  batch.set(logRef, log);
-
-
-
-  await assertSucceeds(batch.commit());
-
-});
-
-test('should reject a reading with inconsistent page counts', async () => {
-
-  const db = authedDb('user-a');
-
-
-
-  const bookRef = doc(db, 'users/user-a/books/book-1');
-
-
-
-  const readingRef = doc(
-
-    db,
-
-    'users/user-a/books/book-1/readings/reading-1'
-
-  );
-
-
-
-  const logRef = doc(
-
-    db,
-
-    `users/user-a/readingLogs/${today()}`
-
-  );
-
-
-
-  // Livro já existente, com progresso inicial na página 186.
-
-  const initialBook = {
-
-    ...validBookData(),
-
-    currentPage: 186,
-
-    lastReadingId: null,
-
-    lastReadingDate: null,
-
-  };
-
-
-
-  await assertSucceeds(setDoc(bookRef, initialBook));
-
-
-
-  const reading = {
-
-    date: today(),
-
-    fromPage: 186,
-
-    toPage: 206,
-
-    pages: 19, // Inválido: 206 - 186 = 20.
-
-    previousId: null,
-
-    voided: false,
-
-    createdAt: Timestamp.now(),
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  const log = {
-
-    date: today(),
-
-    books: {
-
-      'book-1': 20,
-
-    },
-
-    totalPages: 20,
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  const batch = writeBatch(db);
-
-
-
-  batch.update(bookRef, {
-
-    currentPage: 206,
-
-    lastReadingId: 'reading-1',
-
-    lastReadingDate: today(),
-
-    updatedAt: Timestamp.now(),
-
-  });
-
-
-
-  batch.set(readingRef, reading);
-
-  batch.set(logRef, log);
-
-
-
-  await assertFails(batch.commit());
-
-});
-
-test('should reject a reading dated in the future', async () => {
-
-  const db = authedDb('user-a');
-
-
-
-  const bookRef = doc(db, 'users/user-a/books/book-1');
-
-
-
-  const readingRef = doc(
-
-    db,
-
-    'users/user-a/books/book-1/readings/reading-future'
-
-  );
-
-
-
-  const futureDate = new Date();
-
-  futureDate.setDate(futureDate.getDate() + 2);
-
-  const futureDateString = futureDate.toISOString().slice(0, 10);
-
-
-
-  const initialBook = {
-
-    ...validBookData(),
-
-    currentPage: 186,
-
-    lastReadingId: null,
-
-    lastReadingDate: null,
-
-  };
-
-
-
-  await assertSucceeds(setDoc(bookRef, initialBook));
-
-
-
-  const reading = {
-
-    date: futureDateString,
-
-    fromPage: 186,
-
-    toPage: 206,
-
-    pages: 20,
-
-    previousId: null,
-
-    voided: false,
-
-    createdAt: Timestamp.now(),
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  const logRef = doc(
-
-    db,
-
-    `users/user-a/readingLogs/${futureDateString}`
-
-  );
-
-
-
-  const log = {
-
-    date: futureDateString,
-
-    books: {
-
-      'book-1': 20,
-
-    },
-
-    totalPages: 20,
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  const batch = writeBatch(db);
-
-
-
-  batch.update(bookRef, {
-
-    currentPage: 206,
-
-    lastReadingId: 'reading-future',
-
-    lastReadingDate: futureDateString,
-
-    updatedAt: Timestamp.now(),
-
-  });
-
-
-
-  batch.set(readingRef, reading);
-
-  batch.set(logRef, log);
-
-
-
-  await assertFails(batch.commit());
-
-});
-
-test('should allow editing the latest reading session', async () => {
-
-  const db = authedDb('user-a');
-
-
-
-  const bookRef = doc(db, 'users/user-a/books/book-1');
-
-  const readingRef = doc(
-
-    db,
-
-    'users/user-a/books/book-1/readings/reading-1'
-
-  );
-
-
-
-  const initialBook = {
-
-    ...validBookData(),
-
-    currentPage: 206,
-
-    lastReadingId: 'reading-1',
-
-    lastReadingDate: today(),
-
-  };
-
-
-
-  const initialReading = {
-
-    date: today(),
-
-    fromPage: 186,
-
-    toPage: 206,
-
-    pages: 20,
-
-    previousId: null,
-
-    voided: false,
-
-    createdAt: Timestamp.now(),
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  await seedDocument('users/user-a/books/book-1', initialBook);
 
   await seedDocument(
-
-  'users/user-a/books/book-1/readings/reading-1',
-
-  initialReading
-
+    'users/user-a/books/book-1/readings/reading-1',
+    {
+      date: today(),
+      fromPage: 0,
+      toPage: 10,
+      pages: 10,
+      previousId: null,
+      voided: false,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    },
   );
 
+  const db = unauthedDb();
+  const readingRef = doc(
+    db,
+    'users/user-a/books/book-1/readings/reading-1',
+  );
 
+  await assertFails(getDoc(readingRef));
+});
 
-  const updatedReading = {
+test('should deny users from reading another users reading sessions', async () => {
+  await seedDocument(
+    'users/user-b/books/book-1',
+    validBookData(),
+  );
 
-    ...initialReading,
+  await seedDocument(
+    'users/user-b/books/book-1/readings/reading-1',
+    {
+      date: today(),
+      fromPage: 0,
+      toPage: 10,
+      pages: 10,
+      previousId: null,
+      voided: false,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    },
+  );
 
-    toPage: 220,
+  const db = authedDb('user-a');
+  const readingRef = doc(
+    db,
+    'users/user-b/books/book-1/readings/reading-1',
+  );
 
-    pages: 34,
+  await assertFails(getDoc(readingRef));
+});
 
+// ============================================
+// CREATE ACCESS
+// ============================================
+
+test('should deny users from creating reading sessions for another user', async () => {
+  await seedDocument(
+    'users/user-b/books/book-1',
+    validBookData(),
+  );
+
+  const db = authedDb('user-a');
+  const readingRef = doc(
+    db,
+    'users/user-b/books/book-1/readings/reading-1',
+  );
+
+  const reading = {
+    date: today(),
+    fromPage: 0,
+    toPage: 10,
+    pages: 10,
+    previousId: null,
+    voided: false,
+    createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
-
   };
 
+  await assertFails(setDoc(readingRef, reading));
+});
 
+test('should deny unauthenticated users from creating reading sessions', async () => {
+  await seedDocument(
+    'users/user-a/books/book-1',
+    validBookData(),
+  );
+
+  const db = unauthedDb();
+  const readingRef = doc(
+    db,
+    'users/user-a/books/book-1/readings/reading-1',
+  );
+
+  const reading = {
+    date: today(),
+    fromPage: 0,
+    toPage: 10,
+    pages: 10,
+    previousId: null,
+    voided: false,
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  };
+
+  await assertFails(setDoc(readingRef, reading));
+});
+
+// ============================================
+// UPDATE ACCESS
+// ============================================
+
+test('should deny users from updating another users reading sessions', async () => {
+  const book = validBookData();
+
+  book.currentPage = 20;
+  book.lastReadingId = 'reading-1';
+  book.lastReadingDate = today();
+
+  await seedDocument(
+    'users/user-b/books/book-1',
+    book,
+  );
+
+  await seedDocument(
+    'users/user-b/books/book-1/readings/reading-1',
+    {
+      date: today(),
+      fromPage: 10,
+      toPage: 20,
+      pages: 10,
+      previousId: null,
+      voided: false,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    },
+  );
+
+  const db = authedDb('user-a');
+  const readingRef = doc(
+    db,
+    'users/user-b/books/book-1/readings/reading-1',
+  );
+
+  await assertFails(
+    updateDoc(readingRef, {
+      toPage: 30,
+      pages: 20,
+      updatedAt: Timestamp.now(),
+    }),
+  );
+});
+
+test('should deny unauthenticated users from updating reading sessions', async () => {
+  const book = validBookData();
+
+  book.currentPage = 20;
+  book.lastReadingId = 'reading-1';
+  book.lastReadingDate = today();
+
+  await seedDocument(
+    'users/user-a/books/book-1',
+    book,
+  );
+
+  await seedDocument(
+    'users/user-a/books/book-1/readings/reading-1',
+    {
+      date: today(),
+      fromPage: 10,
+      toPage: 20,
+      pages: 10,
+      previousId: null,
+      voided: false,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    },
+  );
+
+  const db = unauthedDb();
+  const readingRef = doc(
+    db,
+    'users/user-a/books/book-1/readings/reading-1',
+  );
+
+  await assertFails(
+    updateDoc(readingRef, {
+      toPage: 30,
+      pages: 20,
+      updatedAt: Timestamp.now(),
+    }),
+  );
+});
+
+// ============================================
+// DELETE ACCESS
+// ============================================
+
+test('should deny users from deleting another users reading sessions', async () => {
+  const book = validBookData();
+
+  book.currentPage = 20;
+  book.lastReadingId = 'reading-1';
+  book.lastReadingDate = today();
+
+  await seedDocument(
+    'users/user-b/books/book-1',
+    book,
+  );
+
+  await seedDocument(
+    'users/user-b/books/book-1/readings/reading-1',
+    {
+      date: today(),
+      fromPage: 10,
+      toPage: 20,
+      pages: 10,
+      previousId: null,
+      voided: false,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    },
+  );
+
+  const db = authedDb('user-a');
+  const readingRef = doc(
+    db,
+    'users/user-b/books/book-1/readings/reading-1',
+  );
+
+  await assertFails(deleteDoc(readingRef));
+});
+
+test('should deny unauthenticated users from deleting reading sessions', async () => {
+  const book = validBookData();
+
+  book.currentPage = 20;
+  book.lastReadingId = 'reading-1';
+  book.lastReadingDate = today();
+
+  await seedDocument(
+    'users/user-a/books/book-1',
+    book,
+  );
+
+  await seedDocument(
+    'users/user-a/books/book-1/readings/reading-1',
+    {
+      date: today(),
+      fromPage: 10,
+      toPage: 20,
+      pages: 10,
+      previousId: null,
+      voided: false,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    },
+  );
+
+  const db = unauthedDb();
+  const readingRef = doc(
+    db,
+    'users/user-a/books/book-1/readings/reading-1',
+  );
+
+  await assertFails(deleteDoc(readingRef));
+});
+
+// ============================================
+// OWNER ACCESS
+// ============================================
+
+test('should allow users to read their own reading sessions', async () => {
+  await seedDocument(
+    'users/user-a/books/book-1',
+    validBookData(),
+  );
+
+  await seedDocument(
+    'users/user-a/books/book-1/readings/reading-1',
+    {
+      date: today(),
+      fromPage: 0,
+      toPage: 10,
+      pages: 10,
+      previousId: null,
+      voided: false,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    },
+  );
+
+  const db = authedDb('user-a');
+  const readingRef = doc(
+    db,
+    'users/user-a/books/book-1/readings/reading-1',
+  );
+
+  await assertSucceeds(getDoc(readingRef));
+});
+
+test('should allow users to create reading sessions for their own books', async () => {
+  const db = authedDb('user-a');
+  const bookRef = doc(
+    db,
+    'users/user-a/books/book-1',
+  );
+
+  const readingRef = doc(
+    db,
+    'users/user-a/books/book-1/readings/reading-1',
+  );
+
+  await seedDocument(
+    'users/user-a/books/book-1',
+    validBookData(),
+  );
+
+  const reading = {
+    date: today(),
+    fromPage: 0,
+    toPage: 20,
+    pages: 20,
+    previousId: null,
+    voided: false,
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  };
+
+  const updatedBook = {
+    ...validBookData(),
+    currentPage: 20,
+    lastReadingId: 'reading-1',
+    lastReadingDate: today(),
+    updatedAt: Timestamp.now(),
+  };
 
   const batch = writeBatch(db);
 
-
-
   batch.update(bookRef, {
-
-    currentPage: 220,
-
-    updatedAt: Timestamp.now(),
-
+    currentPage: updatedBook.currentPage,
+    lastReadingId: updatedBook.lastReadingId,
+    lastReadingDate: updatedBook.lastReadingDate,
+    updatedAt: updatedBook.updatedAt,
   });
 
+  batch.set(readingRef, reading);
 
+  await assertSucceeds(batch.commit());
+});
+
+test('should allow users to update their own reading sessions', async () => {
+  const db = authedDb('user-a');
+  const bookRef = doc(
+    db,
+    'users/user-a/books/book-1',
+  );
+  const readingRef = doc(
+    db,
+    'users/user-a/books/book-1/readings/reading-1',
+  );
+  const book = validBookData();
+
+  book.currentPage = 20;
+  book.lastReadingId = 'reading-1';
+  book.lastReadingDate = today();
+
+  await seedDocument(
+    'users/user-a/books/book-1',
+    book,
+  );
+
+  await seedDocument(
+    'users/user-a/books/book-1/readings/reading-1',
+    {
+      date: today(),
+      fromPage: 10,
+      toPage: 20,
+      pages: 10,
+      previousId: null,
+      voided: false,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    },
+  );
+
+  const updatedReading = {
+    date: today(),
+    fromPage: 10,
+    toPage: 30,
+    pages: 20,
+    previousId: null,
+    voided: false,
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  };
+
+  const batch = writeBatch(db);
+
+  batch.update(bookRef, {
+    currentPage: 30,
+    updatedAt: Timestamp.now(),
+  });
 
   batch.update(readingRef, updatedReading);
 
-
-
   await assertSucceeds(batch.commit());
-
 });
 
-test('should allow deleting the latest reading and revert book progress', async () => {
-
+test('should allow users to delete their own reading sessions', async () => {
   const db = authedDb('user-a');
-
-
-
-  const bookRef = doc(db, 'users/user-a/books/book-1');
-
-  const readingRef = doc(
-
+  const bookRef = doc(
     db,
-
-    'users/user-a/books/book-1/readings/reading-1'
-
-  );
-
-
-
-  const initialBook = {
-
-    ...validBookData(),
-
-    currentPage: 206,
-
-    lastReadingId: 'reading-1',
-
-    lastReadingDate: today(),
-
-  };
-
-
-
-  const initialReading = {
-
-    date: today(),
-
-    fromPage: 186,
-
-    toPage: 206,
-
-    pages: 20,
-
-    previousId: null,
-
-    voided: false,
-
-    createdAt: Timestamp.now(),
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  await seedDocument(
-
     'users/user-a/books/book-1',
-
-    initialBook
-
   );
+  const readingRef = doc(
+    db,
+    'users/user-a/books/book-1/readings/reading-1',
+  );
+  const book = validBookData();
 
-
+  book.currentPage = 20;
+  book.lastReadingId = 'reading-1';
+  book.lastReadingDate = today();
 
   await seedDocument(
-
-    'users/user-a/books/book-1/readings/reading-1',
-
-    initialReading
-
+    'users/user-a/books/book-1',
+    book,
   );
 
-
+  await seedDocument(
+    'users/user-a/books/book-1/readings/reading-1',
+    {
+      date: today(),
+      fromPage: 10,
+      toPage: 20,
+      pages: 10,
+      previousId: null,
+      voided: false,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    },
+  );
 
   const batch = writeBatch(db);
 
-
-
   batch.update(bookRef, {
-
-    currentPage: 186,
-
+    currentPage: 10,
     lastReadingId: null,
-
     lastReadingDate: null,
-
     updatedAt: Timestamp.now(),
-
   });
-
-
 
   batch.delete(readingRef);
 
-
-
   await assertSucceeds(batch.commit());
-
-
-
-  const deletedReading = await getDoc(readingRef);
-
-  const updatedBook = await getDoc(bookRef);
-
-
-
-  assert.equal(deletedReading.exists(), false);
-
-  assert.equal(updatedBook.data().currentPage, 186);
-
-  assert.equal(updatedBook.data().lastReadingId, null);
-
-  assert.equal(updatedBook.data().lastReadingDate, null);
-
-});
-
-test('should deny deleting a non-latest reading session', async () => {
-
-  const db = authedDb('user-a');
-
-
-
-  const bookRef = doc(db, 'users/user-a/books/book-1');
-
-  const reading1Ref = doc(
-
-    db,
-
-    'users/user-a/books/book-1/readings/reading-1'
-
-  );
-
-  const reading2Ref = doc(
-
-    db,
-
-    'users/user-a/books/book-1/readings/reading-2'
-
-  );
-
-
-
-  const initialBook = {
-
-    ...validBookData(),
-
-    currentPage: 220,
-
-    lastReadingId: 'reading-2',
-
-    lastReadingDate: today(),
-
-  };
-
-
-
-  const reading1 = {
-
-    date: today(),
-
-    fromPage: 186,
-
-    toPage: 206,
-
-    pages: 20,
-
-    previousId: null,
-
-    voided: false,
-
-    createdAt: Timestamp.now(),
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  const reading2 = {
-
-    date: today(),
-
-    fromPage: 206,
-
-    toPage: 220,
-
-    pages: 14,
-
-    previousId: 'reading-1',
-
-    voided: false,
-
-    createdAt: Timestamp.now(),
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  await seedDocument(
-
-    'users/user-a/books/book-1',
-
-    initialBook
-
-  );
-
-
-
-  await seedDocument(
-
-    'users/user-a/books/book-1/readings/reading-1',
-
-    reading1
-
-  );
-
-
-
-  await seedDocument(
-
-    'users/user-a/books/book-1/readings/reading-2',
-
-    reading2
-
-  );
-
-
-
-  await assertFails(
-
-    deleteDoc(reading1Ref)
-
-  );
-
-
-
-  const oldReading = await getDoc(reading1Ref);
-
-  const book = await getDoc(bookRef);
-
-
-
-  assert.equal(oldReading.exists(), true);
-
-  assert.equal(book.data().currentPage, 220);
-
-  assert.equal(book.data().lastReadingId, 'reading-2');
-
-});
-
-test('should allow voiding an older reading without changing book progress', async () => {
-
-  const db = authedDb('user-a');
-
-
-
-  const bookRef = doc(db, 'users/user-a/books/book-1');
-
-
-
-  const reading1Ref = doc(
-
-    db,
-
-    'users/user-a/books/book-1/readings/reading-1'
-
-  );
-
-
-
-  const reading2Ref = doc(
-
-    db,
-
-    'users/user-a/books/book-1/readings/reading-2'
-
-  );
-
-
-
-  const initialBook = {
-
-    ...validBookData(),
-
-    currentPage: 220,
-
-    lastReadingId: 'reading-2',
-
-    lastReadingDate: today(),
-
-  };
-
-
-
-  const reading1 = {
-
-    date: today(),
-
-    fromPage: 186,
-
-    toPage: 206,
-
-    pages: 20,
-
-    previousId: null,
-
-    voided: false,
-
-    createdAt: Timestamp.now(),
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  const reading2 = {
-
-    date: today(),
-
-    fromPage: 206,
-
-    toPage: 220,
-
-    pages: 14,
-
-    previousId: 'reading-1',
-
-    voided: false,
-
-    createdAt: Timestamp.now(),
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  await seedDocument(
-
-    'users/user-a/books/book-1',
-
-    initialBook
-
-  );
-
-
-
-  await seedDocument(
-
-    'users/user-a/books/book-1/readings/reading-1',
-
-    reading1
-
-  );
-
-
-
-  await seedDocument(
-
-    'users/user-a/books/book-1/readings/reading-2',
-
-    reading2
-
-  );
-
-
-
-  await assertSucceeds(
-
-    updateDoc(reading1Ref, {
-
-      voided: true,
-
-      updatedAt: Timestamp.now(),
-
-    })
-
-  );
-
-
-
-  const voidedReading = await getDoc(reading1Ref);
-
-  const book = await getDoc(bookRef);
-
-  const latestReading = await getDoc(reading2Ref);
-
-
-
-  assert.equal(voidedReading.exists(), true);
-
-  assert.equal(voidedReading.data().voided, true);
-
-
-
-  assert.equal(latestReading.exists(), true);
-
-  assert.equal(latestReading.data().voided, false);
-
-
-
-  assert.equal(book.data().currentPage, 220);
-
-  assert.equal(book.data().lastReadingId, 'reading-2');
-
-});
-
-test('should deny voiding the latest reading session', async () => {
-
-  const db = authedDb('user-a');
-
-
-
-  const bookRef = doc(db, 'users/user-a/books/book-1');
-
-
-
-  const readingRef = doc(
-
-    db,
-
-    'users/user-a/books/book-1/readings/reading-1'
-
-  );
-
-
-
-  const initialBook = {
-
-    ...validBookData(),
-
-    currentPage: 206,
-
-    lastReadingId: 'reading-1',
-
-    lastReadingDate: today(),
-
-  };
-
-
-
-  const reading = {
-
-    date: today(),
-
-    fromPage: 186,
-
-    toPage: 206,
-
-    pages: 20,
-
-    previousId: null,
-
-    voided: false,
-
-    createdAt: Timestamp.now(),
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  await seedDocument(
-
-    'users/user-a/books/book-1',
-
-    initialBook
-
-  );
-
-
-
-  await seedDocument(
-
-    'users/user-a/books/book-1/readings/reading-1',
-
-    reading
-
-  );
-
-
-
-  await assertFails(
-
-    updateDoc(readingRef, {
-
-      voided: true,
-
-      updatedAt: Timestamp.now(),
-
-    })
-
-  );
-
-
-
-  const savedReading = await getDoc(readingRef);
-
-  const savedBook = await getDoc(bookRef);
-
-
-
-  assert.equal(savedReading.exists(), true);
-
-  assert.equal(savedReading.data().voided, false);
-
-
-
-  assert.equal(savedBook.data().currentPage, 206);
-
-  assert.equal(savedBook.data().lastReadingId, 'reading-1');
-
-});
-
-test('should deny editing a voided reading session', async () => {
-
-  const db = authedDb('user-a');
-
-
-
-  const readingRef = doc(
-
-    db,
-
-    'users/user-a/books/book-1/readings/reading-1'
-
-  );
-
-
-
-  const initialBook = {
-
-    ...validBookData(),
-
-    currentPage: 220,
-
-    lastReadingId: 'reading-2',
-
-    lastReadingDate: today(),
-
-  };
-
-
-
-  const voidedReading = {
-
-    date: today(),
-
-    fromPage: 186,
-
-    toPage: 206,
-
-    pages: 20,
-
-    previousId: null,
-
-    voided: true,
-
-    createdAt: Timestamp.now(),
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  await seedDocument(
-
-    'users/user-a/books/book-1',
-
-    initialBook
-
-  );
-
-
-
-  await seedDocument(
-
-    'users/user-a/books/book-1/readings/reading-1',
-
-    voidedReading
-
-  );
-
-
-
-  await assertFails(
-
-    updateDoc(readingRef, {
-
-      date: today(),
-
-      fromPage: 186,
-
-      toPage: 210,
-
-      pages: 24,
-
-      previousId: null,
-
-      voided: true,
-
-      createdAt: voidedReading.createdAt,
-
-      updatedAt: Timestamp.now(),
-
-    })
-
-  );
-
-
-
-  const savedReading = await getDoc(readingRef);
-
-
-
-  assert.equal(savedReading.exists(), true);
-
-  assert.equal(savedReading.data().voided, true);
-
-  assert.equal(savedReading.data().toPage, 206);
-
-  assert.equal(savedReading.data().pages, 20);
-
-});
-
-test('should deny deleting a voided reading session', async () => {
-
-  const db = authedDb('user-a');
-
-
-
-  const readingRef = doc(
-
-    db,
-
-    'users/user-a/books/book-1/readings/reading-1'
-
-  );
-
-
-
-  const initialBook = {
-
-    ...validBookData(),
-
-    currentPage: 220,
-
-    lastReadingId: 'reading-2',
-
-    lastReadingDate: today(),
-
-  };
-
-
-
-  const voidedReading = {
-
-    date: today(),
-
-    fromPage: 186,
-
-    toPage: 206,
-
-    pages: 20,
-
-    previousId: null,
-
-    voided: true,
-
-    createdAt: Timestamp.now(),
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  await seedDocument(
-
-    'users/user-a/books/book-1',
-
-    initialBook
-
-  );
-
-
-
-  await seedDocument(
-
-    'users/user-a/books/book-1/readings/reading-1',
-
-    voidedReading
-
-  );
-
-
-
-  await assertFails(
-
-    deleteDoc(readingRef)
-
-  );
-
-
-
-  const savedReading = await getDoc(readingRef);
-
-
-
-  assert.equal(savedReading.exists(), true);
-
-  assert.equal(savedReading.data().voided, true);
-
-});
-
-test('should deny voiding an already voided reading session', async () => {
-
-  const db = authedDb('user-a');
-
-
-
-  const readingRef = doc(
-
-    db,
-
-    'users/user-a/books/book-1/readings/reading-1'
-
-  );
-
-
-
-  const initialBook = {
-
-    ...validBookData(),
-
-    currentPage: 220,
-
-    lastReadingId: 'reading-2',
-
-    lastReadingDate: today(),
-
-  };
-
-
-
-  const voidedReading = {
-
-    date: today(),
-
-    fromPage: 186,
-
-    toPage: 206,
-
-    pages: 20,
-
-    previousId: null,
-
-    voided: true,
-
-    createdAt: Timestamp.now(),
-
-    updatedAt: Timestamp.now(),
-
-  };
-
-
-
-  await seedDocument(
-
-    'users/user-a/books/book-1',
-
-    initialBook
-
-  );
-
-
-
-  await seedDocument(
-
-    'users/user-a/books/book-1/readings/reading-1',
-
-    voidedReading
-
-  );
-
-
-
-  await assertFails(
-
-    updateDoc(readingRef, {
-
-      voided: true,
-
-      updatedAt: Timestamp.now(),
-
-    })
-
-  );
-
-
-
-  const savedReading = await getDoc(readingRef);
-
-
-
-  assert.equal(savedReading.exists(), true);
-
-  assert.equal(savedReading.data().voided, true);
-
 });

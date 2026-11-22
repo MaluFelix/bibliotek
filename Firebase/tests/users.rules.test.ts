@@ -1,211 +1,239 @@
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { setupRulesTest, authedDb, unauthedDb, seedDocument, validUserData, validBookData, today, Timestamp } from './helpers';
-import { doc, setDoc, updateDoc, deleteDoc, getDoc, writeBatch } from 'firebase/firestore';
+import {
+  setupRulesTest,
+  authedDb,
+  unauthedDb,
+  seedDocument,
+  validUserData,
+  today,
+  Timestamp,
+} from './helpers';
+import {
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  getDoc,
+} from 'firebase/firestore';
 
 setupRulesTest();
 
-test('should deny unauthenticated access to user data', async () => {
+// ============================================
+// READ ACCESS
+// ============================================
 
+test('should deny unauthenticated users from reading user data', async () => {
   await seedDocument('users/user-a', validUserData());
-
-
 
   const db = unauthedDb();
-
   const userRef = doc(db, 'users/user-a');
 
-
-
   await assertFails(getDoc(userRef));
-
 });
 
-test('should deny users access to another users profile', async () => {
-
-  await seedDocument('users/user-a', validUserData());
-
-
-
-  const db = authedDb('user-b');
-
-  const userRef = doc(db, 'users/user-a');
-
-
-
-  await assertFails(getDoc(userRef));
-
-});
-
-test('should allow users to create their own profile', async () => {
+test('should deny users from reading another users data', async () => {
+  await seedDocument('users/user-b', validUserData());
 
   const db = authedDb('user-a');
+  const userRef = doc(db, 'users/user-b');
 
+  await assertFails(getDoc(userRef));
+});
+
+test('should allow users to read their own data', async () => {
+  await seedDocument('users/user-a', validUserData());
+
+  const db = authedDb('user-a');
   const userRef = doc(db, 'users/user-a');
 
+  await assertSucceeds(getDoc(userRef));
+});
 
+// ============================================
+// CREATE ACCESS
+// ============================================
+
+test('should deny unauthenticated users from creating user data', async () => {
+  const db = unauthedDb();
+  const userRef = doc(db, 'users/user-a');
+
+  await assertFails(setDoc(userRef, validUserData()));
+});
+
+test('should deny users from creating data for another user', async () => {
+  const db = authedDb('user-a');
+  const userRef = doc(db, 'users/user-b');
+
+  await assertFails(setDoc(userRef, validUserData()));
+});
+
+test('should deny creating user data with an invalid goal', async () => {
+  const db = authedDb('user-a');
+  const userRef = doc(db, 'users/user-a');
+
+  const invalidUser = {
+    ...validUserData(),
+    goal: {
+      year: new Date().getFullYear(),
+      target: 0,
+    },
+  };
+
+  await assertFails(setDoc(userRef, invalidUser));
+});
+
+test('should deny creating user data with invalid AI preferences', async () => {
+  const db = authedDb('user-a');
+  const userRef = doc(db, 'users/user-a');
+
+  const invalidUser = {
+    ...validUserData(),
+    aiPreferences: {
+      allowReviewAnalysis: 'yes',
+      allowReviewAnalysisAt: null,
+    },
+  };
+
+  await assertFails(setDoc(userRef, invalidUser));
+});
+
+test('should deny creating user data with unknown fields', async () => {
+  const db = authedDb('user-a');
+  const userRef = doc(db, 'users/user-a');
+
+  const invalidUser = {
+    ...validUserData(),
+    admin: true,
+  };
+
+  await assertFails(setDoc(userRef, invalidUser));
+});
+
+test('should allow users to create their own valid user data', async () => {
+  const db = authedDb('user-a');
+  const userRef = doc(db, 'users/user-a');
 
   await assertSucceeds(setDoc(userRef, validUserData()));
-
 });
 
-test('should reject extra fields in user profiles', async () => {
+// ============================================
+// UPDATE ACCESS
+// ============================================
 
-  const db = authedDb('user-a');
-
-  const userRef = doc(db, 'users/user-a');
-
-
-
-  const user = {
-
-    ...validUserData(),
-
-    campoExtra: 'não permitido',
-
-  };
-
-
-
-  await assertFails(setDoc(userRef, user));
-
-});
-
-test('should reject AI consent enabled without a timestamp', async () => {
-
-  const db = authedDb('user-a');
-
-  const userRef = doc(db, 'users/user-a');
-
-
-
-  const user = {
-
-    ...validUserData(),
-
-    aiPreferences: {
-
-      allowReviewAnalysis: true,
-
-      allowReviewAnalysisAt: null,
-
-    },
-
-  };
-
-
-
-  await assertFails(setDoc(userRef, user));
-
-});
-
-test('should reject AI consent disabled with a timestamp', async () => {
-
-  const db = authedDb('user-a');
-
-  const userRef = doc(db, 'users/user-a');
-
-
-
-  const user = {
-
-    ...validUserData(),
-
-    aiPreferences: {
-
-      allowReviewAnalysis: false,
-
-      allowReviewAnalysisAt: Timestamp.now(),
-
-    },
-
-  };
-
-
-
-  await assertFails(setDoc(userRef, user));
-
-});
-
-test('should deny unauthenticated access to books', async () => {
+test('should deny unauthenticated users from updating user data', async () => {
+  await seedDocument('users/user-a', validUserData());
 
   const db = unauthedDb();
-
-
-
-  await seedDocument(
-
-    'users/user-a/books/book-1',
-
-    validBookData()
-
-  );
-
-
-
-  const bookRef = doc(db, 'users/user-a/books/book-1');
-
-
-
-  await assertFails(getDoc(bookRef));
-
-});
-
-test('should deny users from reading another users books', async () => {
-
-  const db = authedDb('user-a');
-
-
-
-  await seedDocument(
-
-    'users/user-b/books/book-1',
-
-    validBookData()
-
-  );
-
-
-
-  const bookRef = doc(db, 'users/user-b/books/book-1');
-
-
-
-  await assertFails(getDoc(bookRef));
-
-});
-
-test('should deny users from updating another users books', async () => {
-
-  const db = authedDb('user-a');
-
-
-
-  await seedDocument(
-
-    'users/user-b/books/book-1',
-
-    validBookData()
-
-  );
-
-
-
-  const bookRef = doc(db, 'users/user-b/books/book-1');
-
-
+  const userRef = doc(db, 'users/user-a');
 
   await assertFails(
-
-    updateDoc(bookRef, {
-
-      title: 'Livro alterado indevidamente',
-
-      updatedAt: Timestamp.now(),
-
-    })
-
+    updateDoc(userRef, {
+      displayName: 'Updated Name',
+    }),
   );
+});
 
+test('should deny users from updating another users data', async () => {
+  await seedDocument('users/user-b', validUserData());
+
+  const db = authedDb('user-a');
+  const userRef = doc(db, 'users/user-b');
+
+  await assertFails(
+    updateDoc(userRef, {
+      displayName: 'Updated Name',
+    }),
+  );
+});
+
+test('should deny updating user data with an invalid goal', async () => {
+  await seedDocument('users/user-a', validUserData());
+
+  const db = authedDb('user-a');
+  const userRef = doc(db, 'users/user-a');
+
+  await assertFails(
+    updateDoc(userRef, {
+      goal: {
+        year: new Date().getFullYear(),
+        target: -1,
+      },
+    }),
+  );
+});
+
+test('should deny updating user data with invalid AI preferences', async () => {
+  await seedDocument('users/user-a', validUserData());
+
+  const db = authedDb('user-a');
+  const userRef = doc(db, 'users/user-a');
+
+  await assertFails(
+    updateDoc(userRef, {
+      aiPreferences: {
+        allowReviewAnalysis: true,
+        allowReviewAnalysisAt: null,
+      },
+    }),
+  );
+});
+
+test('should deny updating user data with unknown fields', async () => {
+  await seedDocument('users/user-a', validUserData());
+
+  const db = authedDb('user-a');
+  const userRef = doc(db, 'users/user-a');
+
+  await assertFails(
+    updateDoc(userRef, {
+      admin: true,
+    }),
+  );
+});
+
+test('should allow users to update their own valid user data', async () => {
+  await seedDocument('users/user-a', validUserData());
+
+  const db = authedDb('user-a');
+  const userRef = doc(db, 'users/user-a');
+
+  await assertSucceeds(
+    updateDoc(userRef, {
+      displayName: 'Updated Name',
+    }),
+  );
+});
+
+// ============================================
+// DELETE ACCESS
+// ============================================
+
+test('should deny unauthenticated users from deleting user data', async () => {
+  await seedDocument('users/user-a', validUserData());
+
+  const db = unauthedDb();
+  const userRef = doc(db, 'users/user-a');
+
+  await assertFails(deleteDoc(userRef));
+});
+
+test('should deny users from deleting another users data', async () => {
+  await seedDocument('users/user-b', validUserData());
+
+  const db = authedDb('user-a');
+  const userRef = doc(db, 'users/user-b');
+
+  await assertFails(deleteDoc(userRef));
+});
+
+test('should allow users to delete their own user data', async () => {
+  await seedDocument('users/user-a', validUserData());
+
+  const db = authedDb('user-a');
+  const userRef = doc(db, 'users/user-a');
+
+  await assertSucceeds(deleteDoc(userRef));
 });
