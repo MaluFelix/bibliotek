@@ -46,3 +46,5 @@ Thumbs.db
 # Firebase Emulator logs
 /firebase-debug.log
 /firestore-debug.log
+
+.firebase/
